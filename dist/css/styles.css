@@ -51,11 +51,18 @@
 .slime {
   width: 16px;
   height: 16px;
-  /*background-color: red;*/
   background: url('../images/Slime0.png') -32px -16px;
-/*   border-radius: 10px; */
-  /*border: 1px solid black;*/
   float: left;
+}
+.ghost {
+  width: 16px;
+  height: 16px;
+  background: url('../images/Undead0.png') 0 -96px;
+}
+.orc {
+  width: 16px;
+  height: 16px;
+  background: url('../images/Humanoid0.png') 0 -110px;
 }
 .potion {
   width: 16px;
@@ -99,3 +106,4 @@
   background: url('../images/LongWep.png') 0 -16px;
   float: left;
 }
+

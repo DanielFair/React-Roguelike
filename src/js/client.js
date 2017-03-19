@@ -34,19 +34,7 @@ class MainDungeonGrid extends React.Component {
     super(props);
     let width = this.props.width;
     let height = this.props.height;
-    // let gridArr = [];
-    // for(var y = 0; y < height; y++) {
-    //   let row = [];
-    //   for(var x = 0; x < width; x++) {
-    //     row.push({
-    //       type: 'cell',
-    //       id: '',
-    //       x: x,
-    //       y: y
-    //     });
-    //   }
-    //   gridArr.push(row);
-    // }
+
     this.state = {
       grid: [],
       width: width,
@@ -82,13 +70,14 @@ class MainDungeonGrid extends React.Component {
     });
   }
   checkLevel = (player) => {
+    //Immutability complete
     let levelArr = {
       1: 25,
       2: 50,
       3: 100,
       4: 150,
       5: 225
-    }//that's where you're wrong boyo
+    }
     let levelStats = {
       1: {
         maxHp: 10,
@@ -116,18 +105,20 @@ class MainDungeonGrid extends React.Component {
         attack: 17
       }
     }
-    // let player = this.state.player; tester34ws
+    let updatedPlayer = Object.assign({}, player);
     if(player.xp >= levelArr[player.level]) {
-      player.level++;
-      player.maxHp = levelStats[player.level].maxHp;
-      player.currentHp = levelStats[player.level].currentHp;
-      player.attack = levelStats[player.level].attack;
+      updatedPlayer.level++;
+      updatedPlayer.maxHp = levelStats[player.level].maxHp;
+      updatedPlayer.currentHp = levelStats[player.level].currentHp;
+      updatedPlayer.attack = levelStats[player.level].attack;
     }
-    return player;
+    return updatedPlayer;
   };
   fightEnemy = (enemyX, enemyY) => {
     let grid = this.state.grid;
-    let player = this.state.player;
+    // let player = this.state.player;
+    let updatedPlayer = Object.assign({}, this.state.player);
+    let updatedGrid = [...grid];
     let messages = [];
     
     let DMGCHART = {
@@ -137,44 +128,48 @@ class MainDungeonGrid extends React.Component {
     }
     //Player attacks enemy
     function damageRoll() {
-      let roll = Math.floor(Math.random() * DMGCHART[player.weapon].length);
-      return DMGCHART[player.weapon][roll];
+      let roll = Math.floor(Math.random() * DMGCHART[updatedPlayer.weapon].length);
+      return DMGCHART[updatedPlayer.weapon][roll];
     }
-    let damage = (0.25*player.level*player.attack) + damageRoll();
-    grid[enemyY][enemyX].enemyStats.hp -= damage;
+    let damage = (0.25*updatedPlayer.level*updatedPlayer.attack) + damageRoll();
+
+    //Need to fix grid mutation here
+    updatedGrid[enemyY][enemyX].enemyStats.hp -= damage;
     
-    messages.push('Attacked '+grid[enemyY][enemyX].enemyStats.enemyName+' for '+damage+' dmg, enemy HP: '+grid[enemyY][enemyX].enemyStats.hp);
+    messages.push('Attacked '+updatedGrid[enemyY][enemyX].enemyStats.enemyName+' for '+damage+' dmg, enemy HP: '+updatedGrid[enemyY][enemyX].enemyStats.hp);
    
-    
     //Check if enemy dies
-    if(grid[enemyY][enemyX].enemyStats.hp <= 0) {
-      messages.push('Killed '+grid[enemyY][enemyX].enemyStats.enemyName+'!');
-      player.xp += grid[enemyY][enemyX].enemyStats.xp;
-      player = this.checkLevel(player);
-      if (grid[enemyY][enemyX].enemyStats.drops.length > 0){
-        grid[enemyY][enemyX].type = grid[enemyY][enemyX].enemyStats.drops;
+    if(updatedGrid[enemyY][enemyX].enemyStats.hp <= 0) {
+      messages.push('Killed '+updatedGrid[enemyY][enemyX].enemyStats.enemyName+'!');
+      updatedPlayer.xp += updatedGrid[enemyY][enemyX].enemyStats.xp;
+      updatedPlayer = this.checkLevel(updatedPlayer);
+      if (updatedGrid[enemyY][enemyX].enemyStats.drops.length > 0){
+        //Update grid with dropped item
+        updatedGrid[enemyY][enemyX].type = updatedGrid[enemyY][enemyX].enemyStats.drops;
       }
       else{
-        grid[enemyY][enemyX].type = 'floor';
+        //Remove dead enemy and render a floor tile
+        updatedGrid[enemyY][enemyX].type = 'floor';
       }
       
     }
     //If enemy survived, enemy attacks player
     else{
-      player.currentHp -= grid[enemyY][enemyX].enemyStats.attack;
+      updatedPlayer.currentHp -= grid[enemyY][enemyX].enemyStats.attack;
       messages.push(grid[enemyY][enemyX].enemyStats.enemyName+' attacks for '+grid[enemyY][enemyX].enemyStats.attack+' damage!');
     }
     //Check if player dies
-    if(player.currentHp <= 0) {
+    if(updatedPlayer.currentHp <= 0) {
       messages.push('You died!');
 
       this.setupDungeon(null, 1);
       return;
     }
-    console.log('do we res');
+    //marker
+
     this.setState({
-        grid: grid,
-        player: player,
+        grid: updatedGrid,
+        player: updatedPlayer,
         currentMessage: messages
     });
   };
@@ -188,10 +183,9 @@ class MainDungeonGrid extends React.Component {
     let roomSizing = [3, 15];
     let roomMin = roomSizing[0];
     let roomMax = roomSizing[1];
-    let gridCopy = grid;
-    // var rooms = this.state.rooms;
+    let gridCopy = [...grid];
+    let updatedRooms = [...rooms];
     var roomCounter = 0;
-    // var roomCounter = this.state.roomCounter;d
     
     //Attempt rendering rooms n times
     for(var d = 0; d < attempts; d++){
@@ -208,13 +202,11 @@ class MainDungeonGrid extends React.Component {
           for(var x = xStart-2; x <= xStart+(roomWidth+1); x++) {
             if(gridCopy[y][x].type !== 'cell') {
               collision = true;
-              // console.log('Collision at cell '+x,y);
               break;
             }
           }
         }
         if(collision == false) {
-          // console.log('No collisions, rendering room.');
           roomCounter++;
           let room = {
             xStart: xStart,
@@ -224,8 +216,7 @@ class MainDungeonGrid extends React.Component {
             connected: false,
             roomNum: roomCounter
           };
-
-          rooms.push(room);
+          updatedRooms.push(room);
 
           //Fill in floor row by row
           for(var y = yStart; y <= yStart+(roomHeight-1); y++) {
@@ -237,27 +228,14 @@ class MainDungeonGrid extends React.Component {
           //call drawPath
           gridCopy = this.drawPath(room, gridCopy, roomCounter);
         }
-        else {
-          // console.log('collision detected');
-        }
-      }
-
-      else {
-        // console.log('Room crossed grid edges');
       }
     }
     
     return {
       grid: gridCopy,
-      rooms: rooms,
+      rooms: updatedRooms,
       roomCounter: roomCounter
     };
-
-    // this.setState({
-    //   grid: gridCopy,
-    //   rooms: rooms,
-    //   roomCounter: roomCounter
-    // }); 
   };
 
   drawPath = (room, grid, roomNum) => {
@@ -300,7 +278,6 @@ class MainDungeonGrid extends React.Component {
 
               if(grid[currentPath['y']][currentPath['x']].type == 'floor' && grid[currentPath['y']][currentPath['x']].id != roomNum)
                 {
-                  // console.log('Path successfully connected');
                   room.connected = true;
                 }
               else{
@@ -313,15 +290,12 @@ class MainDungeonGrid extends React.Component {
               break;
             }        
           }
-
         }
       }
     return grid;
-
   };
   setupDungeon = (experiencedPlayer, mapLevel) => {
   //Set initial grid skeleton
-    console.log('generating new skeleton grid');
     var gridArr = [];
     for(let y = 0; y < this.state.height; y++) {
       let row = [];
@@ -376,8 +350,8 @@ class MainDungeonGrid extends React.Component {
     gridArr[player.locationY][player.locationX].type = 'player';
     
     //Place enemies and items based on map level
-    gridArr = this.placeEnemies(gridArr);
-    gridArr = this.placeItems(gridArr);
+    gridArr = this.placeEnemies(gridArr, mapLevel);
+    gridArr = this.placeItems(gridArr, mapLevel);
 
     //Place end of level staircase
     const setFinalRoom = (grid, rooms) => {
@@ -403,7 +377,6 @@ class MainDungeonGrid extends React.Component {
       }
       
     };
-    // console.log('test');
     gridArr = setFinalRoom(gridArr, rooms);
     //Update state
     this.setState({
@@ -414,27 +387,53 @@ class MainDungeonGrid extends React.Component {
       mapLevel: mapLevel
     });
   };
-  placeEnemies = (grid) => {
-    let numEnemies = 0;
-    while(numEnemies < 5) {
-      let randomX = this.randomRange(0, this.state.width-1);
-      let randomY = this.randomRange(0, this.state.height-1);
-      if(grid[randomY][randomX].type == 'floor'){
-        grid[randomY][randomX].type = 'enemy';
-        grid[randomY][randomX].enemyStats = {
+  placeEnemies = (grid, mapLevel) => {
+    let levelEnemies = {
+      1: ['slime'],
+      2: ['slime', 'ghost', 'orc'],
+      3: ['ghost', 'orc']
+    }
+    let enemyStats = {
+      'slime': {
           enemyName: 'slime',
           hp: 10,
           attack: 3,
           xp: 10,
+          drops: (Math.random() < 0.3 ? 'potion' : '')
+      },
+      'ghost': {
+          enemyName: 'ghost',
+          hp: 25,
+          attack: 6,
+          xp: 25,
           drops: (Math.random() < 0.3? 'shortsword': Math.random() < 0.3 ? 'potion' : '')
-        }
+      },
+      'orc': {
+          enemyName: 'orc',
+          hp: 30,
+          attack: 7,
+          xp: 30,
+          drops: (Math.random() < 0.3? 'longsword': Math.random() < 0.3 ? 'potion' : '')
+      }
+    }
+    let numEnemies = 0;
+    let targetNumEnemies = this.randomRange(3,7);
+
+    while(numEnemies < targetNumEnemies) {
+      let randomX = this.randomRange(0, this.state.width-1);
+      let randomY = this.randomRange(0, this.state.height-1);
+      let randomEnemy = levelEnemies[mapLevel][this.randomRange(0, levelEnemies[mapLevel].length-1)];
+      // console.log(randomEnemy);
+      if(grid[randomY][randomX].type == 'floor'){
+        grid[randomY][randomX].type = 'enemy';
+        // console.log('setting enemy stats to: ', enemyStats[randomEnemy]);
+        grid[randomY][randomX].enemyStats = enemyStats[randomEnemy];
         numEnemies++;
-        // console.log('Slime at '+randomX+', '+randomY); 
       }
     }
     return grid;
   };
-  placeItems = (grid) => {
+  placeItems = (grid, mapLevel) => {
     let weaponLevels = {
       1: ['shortsword'],
       2: ['shortsword', 'longsword'],
@@ -454,7 +453,7 @@ class MainDungeonGrid extends React.Component {
     while(numWeapons < 2){
       let randomX = this.randomRange(0, this.state.width-1);
       let randomY = this.randomRange(0, this.state.height-1);
-      let randomWeapon = weaponLevels[this.state.mapLevel][this.randomRange(0,weaponLevels[this.state.mapLevel].length-1)];
+      let randomWeapon = weaponLevels[this.state.mapLevel][this.randomRange(0,weaponLevels[mapLevel].length-1)];
       // console.log(randomWeapon);
       if(grid[randomY][randomX].type == 'floor'){
         grid[randomY][randomX].type = randomWeapon;
@@ -463,7 +462,7 @@ class MainDungeonGrid extends React.Component {
     }
     return grid;
   }
-  handleMove = (grid, player, direction) => {
+  handleMove = (direction) => {
     let directions = [
             {direction: 'up',
             'axis': 'y',
@@ -478,10 +477,11 @@ class MainDungeonGrid extends React.Component {
             'axis': 'x',
             calc: 1}];
     let messages = [];
-    // let mapLevel = this.state.mapLevel;
+    var directionObj;
+    let grid = [...this.state.grid];
+    let player = Object.assign({}, this.state.player);
     let currentLocation = {'x': player.locationX, 'y': player.locationY};
     let nextMove = JSON.parse(JSON.stringify(currentLocation));
-    var directionObj;
     directions.forEach((obj) => {
       if(obj.direction == direction) {
         directionObj = obj;
@@ -542,20 +542,19 @@ class MainDungeonGrid extends React.Component {
   };
   handleKeyPress = (e) => {
     let player = this.state.player;
-    let grid = this.state.grid;
     e.preventDefault();
     switch(e.key) {
       case 'ArrowUp':
-        this.handleMove(grid, player, 'up');
+        this.handleMove('up');
         break;
       case 'ArrowDown':
-        this.handleMove(grid, player, 'down');
+        this.handleMove('down');
         break;
       case 'ArrowLeft':
-        this.handleMove(grid, player, 'left');
+        this.handleMove('left');
         break;
       case 'ArrowRight':
-        this.handleMove(grid, player, 'right');
+        this.handleMove('right');
         break;
     }
   };
@@ -651,14 +650,6 @@ class Tile extends React.Component {
     else{
       tileClass = this.props.contents;
     }
-
-
-    // else if(this.props.contents =='stairsUp') {
-    //   tileClass = 'StairsUp';
-    // }
-    // else if(this.props.contents =='treasure') {
-    //   tileClass = 'Treasure';
-    // }
 
     return (
       <div className={tileClass} id = {this.props.id}></div>

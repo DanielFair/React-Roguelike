@@ -10,7 +10,7 @@ const Hud = (props) => {
       <b> Weapon: </b> {props.weapon}
       <b> Attack:</b> {props.attack}
       <b> Inventory:</b> {props.items.join(', ')}
-      
+      <b> Dungeon Level:</b>{props.mapLevel}
     </div>
   );
 }
@@ -34,46 +34,53 @@ class MainDungeonGrid extends React.Component {
     super(props);
     let width = this.props.width;
     let height = this.props.height;
-
-    let gridArr = [];
-    for(var y = 0; y < height; y++) {
-      let row = [];
-      for(var x = 0; x < width; x++) {
-        row.push({
-          type: 'cell',
-          id: '',
-          x: x,
-          y: y
-        });
-      }
-      gridArr.push(row);
-    }
-
+    // let gridArr = [];
+    // for(var y = 0; y < height; y++) {
+    //   let row = [];
+    //   for(var x = 0; x < width; x++) {
+    //     row.push({
+    //       type: 'cell',
+    //       id: '',
+    //       x: x,
+    //       y: y
+    //     });
+    //   }
+    //   gridArr.push(row);
+    // }
     this.state = {
-      grid: gridArr,
+      grid: [],
       width: width,
       height: height,
       rooms: [],
       roomCounter: 0,
       player: '',
       currentMessage: [],
-      darkness: true
+      mapLevel: 1,
+      viewAll: false
     };
   }
   componentDidMount = () => {
     window.addEventListener('keydown', this.handleKeyPress);
   };
   componentWillMount = () => {
-    this.setupDungeon();
+    this.setupDungeon(null, 1);
   };
   componentWillUnmount = () => {
     window.removeEventListener('keydown', this.handleKeyPress);
   };
-  toggleDarkness = () => {
+  toggleViewAll = () => {
+    let dungeonStyle = document.getElementById('MainDungeon');
+    if(dungeonStyle.className == 'MainDungeon'){
+      dungeonStyle.className = 'ViewAll';
+    }
+    else{
+      dungeonStyle.className = 'MainDungeon';
+    }
+    
     this.setState({
-      darkness: !this.state.darkness
+      viewAll: !this.state.viewAll
     });
-  };
+  }
   checkLevel = (player) => {
     let levelArr = {
       1: 25,
@@ -118,15 +125,15 @@ class MainDungeonGrid extends React.Component {
     }
     return player;
   };
-  fightEnemy = (enemyLocation) => {
+  fightEnemy = (enemyX, enemyY) => {
     let grid = this.state.grid;
     let player = this.state.player;
     let messages = [];
     
     let DMGCHART = {
-      'Unarmed': [1,2,4],
-      'Shortsword': [4,5,7],
-      'Longsword': [5,7,9]
+      'unarmed': [1,2,4],
+      'shortsword': [4,5,7],
+      'longsword': [5,7,9]
     }
     //Player attacks enemy
     function damageRoll() {
@@ -134,30 +141,37 @@ class MainDungeonGrid extends React.Component {
       return DMGCHART[player.weapon][roll];
     }
     let damage = (0.25*player.level*player.attack) + damageRoll();
-    grid[enemyLocation].contents.hp -= damage;
+    grid[enemyY][enemyX].enemyStats.hp -= damage;
     
-    messages.push('Attacked '+grid[enemyLocation].contents.enemyName+' for '+damage+' dmg, enemy HP: '+grid[enemyLocation].contents.hp);
+    messages.push('Attacked '+grid[enemyY][enemyX].enemyStats.enemyName+' for '+damage+' dmg, enemy HP: '+grid[enemyY][enemyX].enemyStats.hp);
    
     
     //Check if enemy dies
-    if(grid[enemyLocation].contents.hp <= 0) {
-      messages.push('Killed '+grid[enemyLocation].contents.enemyName+'!');
-      player.xp += grid[enemyLocation].contents.xp;
+    if(grid[enemyY][enemyX].enemyStats.hp <= 0) {
+      messages.push('Killed '+grid[enemyY][enemyX].enemyStats.enemyName+'!');
+      player.xp += grid[enemyY][enemyX].enemyStats.xp;
       player = this.checkLevel(player);
-      grid[enemyLocation].contents = grid[enemyLocation].contents.drops;
+      if (grid[enemyY][enemyX].enemyStats.drops.length > 0){
+        grid[enemyY][enemyX].type = grid[enemyY][enemyX].enemyStats.drops;
+      }
+      else{
+        grid[enemyY][enemyX].type = 'floor';
+      }
+      
     }
     //If enemy survived, enemy attacks player
     else{
-      player.currentHp -= grid[enemyLocation].contents.attack;
-      messages.push(grid[enemyLocation].contents.enemyName+' attacks for '+grid[enemyLocation].contents.attack+' damage!');
+      player.currentHp -= grid[enemyY][enemyX].enemyStats.attack;
+      messages.push(grid[enemyY][enemyX].enemyStats.enemyName+' attacks for '+grid[enemyY][enemyX].enemyStats.attack+' damage!');
     }
     //Check if player dies
     if(player.currentHp <= 0) {
       messages.push('You died!');
 
-      this.setupDungeon();
+      this.setupDungeon(null, 1);
       return;
     }
+    console.log('do we res');
     this.setState({
         grid: grid,
         player: player,
@@ -170,14 +184,14 @@ class MainDungeonGrid extends React.Component {
     return randomReturn;
   };
 
-  renderRoom = (attempts) => {
+  renderRoom = (attempts, grid, rooms) => {
     let roomSizing = [3, 15];
     let roomMin = roomSizing[0];
     let roomMax = roomSizing[1];
-    let gridCopy = this.state.grid;
-    var rooms = this.state.rooms;
-    // var roomCounter = 0;
-    var roomCounter = this.state.roomCounter;
+    let gridCopy = grid;
+    // var rooms = this.state.rooms;
+    var roomCounter = 0;
+    // var roomCounter = this.state.roomCounter;d
     
     //Attempt rendering rooms n times
     for(var d = 0; d < attempts; d++){
@@ -284,14 +298,13 @@ class MainDungeonGrid extends React.Component {
             if(grid[nextMove['y']] != undefined && grid[nextMove['y']][nextMove['x']]){
               currentPath[axis] += directions[randomDirection].calc;
 
-              if((grid[currentPath['y']][currentPath['x']].type == 'path' && grid[currentPath['y']][currentPath['x']].id != roomNum) ||
-                (grid[currentPath['y']][currentPath['x']].type == 'floor' && grid[currentPath['y']][currentPath['x']].id != roomNum))
+              if(grid[currentPath['y']][currentPath['x']].type == 'floor' && grid[currentPath['y']][currentPath['x']].id != roomNum)
                 {
                   // console.log('Path successfully connected');
                   room.connected = true;
                 }
               else{
-                grid[currentPath['y']][currentPath['x']].type = 'path';
+                grid[currentPath['y']][currentPath['x']].type = 'floor';
                 grid[currentPath['y']][currentPath['x']].id = roomNum;
               }
             }
@@ -306,63 +319,28 @@ class MainDungeonGrid extends React.Component {
     return grid;
 
   };
-  setupDungeon = (experiencedPlayer) => {
-    // //Iterate through tilemap and create objects for each tile + its contents
-    // let gridArr = [];
-    // for(var x = 0; x < tileMaps[this.state.mapLevel].length; x++) {
-    //   let contents = '';
-    //   if(tileMaps[this.state.mapLevel][x] == 1) {
-    //     contents = 'wall';    
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 2) {
-    //     contents = 'door';
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 4) {
-    //     contents = 'key';
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 3) {
-        
-    //     contents =  {
-    //       type: 'enemy',
-    //       enemyName: 'Slime',
-    //       hp: 10,
-    //       attack: 2,
-    //       xp: 10,
-    //       drops: (Math.random() < 0.3? 'Shortsword': Math.random() < 0.6 ? 'key' : '')
-    //     }
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 8) {
-    //     contents =  {
-    //       type: 'enemy',
-    //       enemyName: 'Chief Orc',
-    //       hp: 50,
-    //       attack: 10,
-    //       xp: 50,
-    //       drops: (Math.random() < 0.75? 'Longsword': 'potion')
-    //     }
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 5) {
-    //     contents = 'potion';
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 6) {
-    //     contents = 'stairsUp';
-    //   }
-    //   else if(tileMaps[this.state.mapLevel][x] == 7) {
-    //     contents = 'treasure';
-    //   }
-      
-    //   gridArr.push({
-    //     contents: contents,
-    //     id: x,
-    //     dark: true
-    //   });
-    // }
+  setupDungeon = (experiencedPlayer, mapLevel) => {
+  //Set initial grid skeleton
+    console.log('generating new skeleton grid');
+    var gridArr = [];
+    for(let y = 0; y < this.state.height; y++) {
+      let row = [];
+      for(let x = 0; x < this.state.width; x++) {
+        row.push({
+          type: 'cell',
+          id: '',
+          x: x,
+          y: y
+        });
+      }
+      gridArr.push(row);
+    }
     
-    //Run renderRooms with n attempts
-    var gridArr = this.state.grid;
-    var updatedArr = this.renderRoom(50);
+    //Run renderRooms with n attempts at a valid room
+    let rooms = [];
+    var updatedArr = this.renderRoom(50, gridArr, rooms);
     gridArr = updatedArr.grid;
-    var rooms = updatedArr.rooms;
+    rooms = updatedArr.rooms;
     var roomCounter = updatedArr.roomCounter; 
     
     //Set player starting location
@@ -372,8 +350,6 @@ class MainDungeonGrid extends React.Component {
       if(room.roomNum == 1){
         playerStartX = this.randomRange(room.xStart, room.xStart+room.width-1);
         playerStartY = this.randomRange(room.yStart, room.yStart+room.height-1);
-        // console.log('playerStartX: '+playerStartX);
-        // console.log('playerStartY: '+playerStartY); 
       }
     });
    //Starting player object
@@ -393,36 +369,126 @@ class MainDungeonGrid extends React.Component {
         xp: 0,
         level: 1,
         inventory: [],
-        weapon: 'Unarmed'
+        weapon: 'unarmed'
       }
     };
 
     gridArr[player.locationY][player.locationX].type = 'player';
     
     //Place enemies and items based on map level
-    gridArr = this.placeEnemies(gridArr);
+    gridArr = this.placeEnemies(gridArr, mapLevel);
+    gridArr = this.placeItems(gridArr, mapLevel);
 
+    //Place end of level staircase
+    const setFinalRoom = (grid, rooms) => {
+      let finalRoom = rooms[rooms.length-1].roomNum-1;
+      let randomX = this.randomRange(rooms[finalRoom].xStart, rooms[finalRoom].xStart+rooms[finalRoom].width-1);
+      let randomY = this.randomRange(rooms[finalRoom].yStart, rooms[finalRoom].yStart+rooms[finalRoom].height-1);
+
+      //If it's the final level of the dungeon, spawn the boss enemy instead of another staircase
+      if(mapLevel == 3){
+        grid[randomY][randomX].type = 'enemy';
+        grid[randomY][randomX].enemyStats = {
+          enemyName: 'chiefOrc',
+          hp: 50,
+          attack: 9,
+          xp: 100,
+          drops: 'treasure'
+        }
+        return grid;
+      }
+      else{
+        grid[randomY][randomX].type = 'staircase';
+        return grid;
+      }
+      
+    };
+    // console.log('test');
+    gridArr = setFinalRoom(gridArr, rooms);
     //Update state
     this.setState({
       grid: gridArr,
       player: player,
       rooms: rooms,
-      roomCounter: roomCounter
+      roomCounter: roomCounter,
+      mapLevel: mapLevel
     });
   };
-  placeEnemies = (grid) => {
+  placeEnemies = (grid, mapLevel) => {
+    let levelEnemies = {
+      1: ['slime'],
+      2: ['slime', 'ghost', 'orc'],
+      3: ['ghost', 'orc']
+    }
+    let enemyStats = {
+      'slime': {
+          enemyName: 'slime',
+          hp: 10,
+          attack: 3,
+          xp: 10,
+          drops: (Math.random() < 0.3 ? 'potion' : '')
+      },
+      'ghost': {
+          enemyName: 'ghost',
+          hp: 25,
+          attack: 6,
+          xp: 25,
+          drops: (Math.random() < 0.3? 'shortsword': Math.random() < 0.3 ? 'potion' : '')
+      },
+      'orc': {
+          enemyName: 'orc',
+          hp: 30,
+          attack: 7,
+          xp: 30,
+          drops: (Math.random() < 0.3? 'longsword': Math.random() < 0.3 ? 'potion' : '')
+      }
+    }
     let numEnemies = 0;
-    while(numEnemies < 5) {
+    let targetNumEnemies = this.randomRange(3,7);
+
+    while(numEnemies < targetNumEnemies) {
       let randomX = this.randomRange(0, this.state.width-1);
       let randomY = this.randomRange(0, this.state.height-1);
-      if(grid[randomY][randomX].type == 'floor' || grid[randomY][randomX].type == 'path'){
-        grid[randomY][randomX].type = 'slime';
+      let randomEnemy = levelEnemies[mapLevel][this.randomRange(0, levelEnemies[mapLevel].length-1)];
+      // console.log(randomEnemy);
+      if(grid[randomY][randomX].type == 'floor'){
+        grid[randomY][randomX].type = 'enemy';
+        // console.log('setting enemy stats to: ', enemyStats[randomEnemy]);
+        grid[randomY][randomX].enemyStats = enemyStats[randomEnemy];
         numEnemies++;
-        console.log('Slime at '+randomX+', '+randomY);
       }
     }
     return grid;
   };
+  placeItems = (grid, mapLevel) => {
+    let weaponLevels = {
+      1: ['shortsword'],
+      2: ['shortsword', 'longsword'],
+      3: ['longsword'],
+    }
+    let numPotions = 0;
+    let numWeapons = 0; 
+    while(numPotions < 3) {
+      let randomX = this.randomRange(0, this.state.width-1);
+      let randomY = this.randomRange(0, this.state.height-1);
+      if(grid[randomY][randomX].type == 'floor'){
+        grid[randomY][randomX].type = 'potion';
+        numPotions++;
+        // console.log('Slime at '+randomX+', '+randomY);
+      }
+    }
+    while(numWeapons < 2){
+      let randomX = this.randomRange(0, this.state.width-1);
+      let randomY = this.randomRange(0, this.state.height-1);
+      let randomWeapon = weaponLevels[this.state.mapLevel][this.randomRange(0,weaponLevels[mapLevel].length-1)];
+      // console.log(randomWeapon);
+      if(grid[randomY][randomX].type == 'floor'){
+        grid[randomY][randomX].type = randomWeapon;
+        numWeapons++;
+      }
+    }
+    return grid;
+  }
   handleMove = (grid, player, direction) => {
     let directions = [
             {direction: 'up',
@@ -438,6 +504,7 @@ class MainDungeonGrid extends React.Component {
             'axis': 'x',
             calc: 1}];
     let messages = [];
+    // let mapLevel = this.state.mapLevel;
     let currentLocation = {'x': player.locationX, 'y': player.locationY};
     let nextMove = JSON.parse(JSON.stringify(currentLocation));
     var directionObj;
@@ -455,75 +522,49 @@ class MainDungeonGrid extends React.Component {
         player.locationY = nextMove.y;
         grid[player.locationY][player.locationX].type = 'player';
       }
-      else if(grid[nextMove.y][nextMove.x].type == 'path') {
-        grid[currentLocation.y][currentLocation.x].type = 'path';
+
+      else if (grid[nextMove.y][nextMove.x].type == 'shortsword' || grid[nextMove.y][nextMove.x].type == 'longsword') {
+        player.weapon = grid[nextMove.y][nextMove.x].type;
+        grid[player.locationY][player.locationX].type = 'floor';
         player.locationX = nextMove.x;
         player.locationY = nextMove.y;
+        messages.push('Equipped '+grid[nextMove.y][nextMove.x].type+'!');
         grid[player.locationY][player.locationX].type = 'player';
       }
-      // else if(grid[player.location+directions[direction]].contents == 'key') {
-      //   grid[player.location].contents = '';
-      //   player.location += directions[direction];
-      //   player.inventory.push(grid[player.location].contents);
-      //   messages.push('Picked up '+grid[player.location].contents+'!');
-      //   grid[player.location].contents = 'player';
-      // }
-      // else if (grid[player.location+directions[direction]].contents == 'Shortsword' ||
-      //          grid[player.location+directions[direction]].contents == 'Longsword') {
-      //   player.weapon = grid[player.location+directions[direction]].contents;
-      //   grid[player.location].contents = '';
-      //   player.location += directions[direction];
-      //   messages.push('Equipped '+grid[player.location].contents+'!');
-      //   grid[player.location].contents = 'player';
-      // }
-      // else if(grid[player.location+directions[direction]].contents == 'door') {
-      //   let keyIndex = player.inventory.indexOf('key');
-      //   if(keyIndex !== -1){
-      //     messages.push('You unlocked the door!');
-      //     grid[player.location].contents = '';
-      //     player.location += directions[direction];
-      //     grid[player.location].contents = 'player'
-          
-      //     //Delete key from inventory
-      //     player.inventory.splice(keyIndex, 1);
-      //   }
-      //   else {
-      //     messages.push("You don't have the key!");
-      //   }
-      // }
-      // else if(grid[player.location+directions[direction]].contents.type == 'enemy') {
-      //   let enemyLocation = player.location+directions[direction];
-      //   this.fightEnemy(enemyLocation);
-      //   return;
-      // }
-      // else if(grid[player.location+directions[direction]].contents == 'potion') {
-      //   //Need to implement max HP attribute for player
-      //   let healedHp = player.currentHp + 10;
-      //   player.currentHp = Math.min(player.maxHp, healedHp);
-      //   grid[player.location].contents = '';
-      //   player.location += directions[direction];
-      //   grid[player.location].contents = 'player'
-      // }
-      // else if(grid[player.location+directions[direction]].contents == 'stairsUp') {
-      //   this.setState({
-      //     mapLevel: this.state.mapLevel+1
-      //   })
-      //   this.setupDungeon(player);
-      //   return;
-      // }
-      // else if(grid[player.location+directions[direction]].contents == 'treasure') {
-      //   messages.push("Congratulations, you have defeated the boss and found the treasure!");
-      // }
-      // grid = this.fogOfWar(grid, player);
+      else if(grid[nextMove.y][nextMove.x].type == 'potion') {
+        //Need to implement max HP attribute for player
+        let healedHp = player.currentHp + 10;
+        player.currentHp = Math.min(player.maxHp, healedHp);
+        grid[player.locationY][player.locationX].type = 'floor';
+        player.locationX = nextMove.x;
+        player.locationY = nextMove.y;
+        grid[player.locationY][player.locationX].type = 'player'
+        messages.push('You healed with the potion!');
+      }
+
+      else if(grid[nextMove.y][nextMove.x].type == 'enemy') {
+        this.fightEnemy(nextMove.x, nextMove.y);
+        return;
+      }
+      
+      else if(grid[nextMove.y][nextMove.x].type == 'staircase') {
+        var mapLevel = this.state.mapLevel+1;
+        this.setupDungeon(player, mapLevel);
+        return;
+      }
+      else if(grid[nextMove.y][nextMove.x].type == 'treasure') {
+        grid[nextMove.y][nextMove.x].type = 'treasureOpen';
+        messages.push('Congratulations adventurer! You have defeated the Chief Orc and recovered the hidden treasure!');
+      }
       
       this.setState({
               grid: grid,
               player: player,
-              currentMessage: messages
+              currentMessage: messages,
+              // mapLevel: mapLevel
         });
     }
-    // else {das
-    // }
+
   };
   handleKeyPress = (e) => {
     let player = this.state.player;
@@ -552,46 +593,43 @@ class MainDungeonGrid extends React.Component {
       endX: player.locationX +12,
       endY: player.locationY +12
     };
-    let tileCount = 0;
     let tileComps = this.state.grid.map((row) => {
       return row.map((tile) => {
-        // console.log('tile.x: '+tile.x);
-        // console.log('camera.startX: '+camera.startX);
-        if(player.locationX < 12){
-          camera.startX = 0;
-          camera.endX = 24;
+        if(!this.state.viewAll){
+          if(player.locationX < 12){
+            camera.startX = 0;
+            camera.endX = 24;
+          }
+          else if(player.locationX >= 49-12) {
+            camera.endX = 49;
+            camera.startX = 25;
+          }
+          if(player.locationY < 12){
+            camera.startY = 0;
+            camera.endY = 24;
+          }
+          else if(player.locationY >= 49-12) {
+            camera.endY = 49;
+            camera.startY = 25;
+          }
+          if(tile.x >= camera.startX &&
+            tile.x <= camera.endX &&
+            tile.y >= camera.startY &&
+            tile.y <= camera.endY) {
+              let enemyName = (tile.enemyStats? tile.enemyStats.enemyName : '');
+              let id = tile.x+','+tile.y;
+              return <Tile id={id} contents={tile.type} enemyName={enemyName} />;
+          }
+        } 
+        else{
+          let enemyName = (tile.enemyStats? tile.enemyStats.enemyName : '');
+          let id = tile.x+','+tile.y;
+          return <Tile id={id} contents={tile.type} enemyName={enemyName} />;
         }
-        else if(player.locationX >= 49-12) {
-          camera.endX = 49;
-          camera.startX = 25;
-        }
-        if(player.locationY < 12){
-          camera.startY = 0;
-          camera.endY = 24;
-        }
-        else if(player.locationY >= 49-12) {
-          camera.endY = 49;
-          camera.startY = 25;
-        }
-        if(tile.x >= camera.startX &&
-          tile.x <= camera.endX &&
-          tile.y >= camera.startY &&
-          tile.y <= camera.endY) {
-            tileCount++;
-            // console.log('dwgh: tile');
-            let id = tile.x+','+tile.y;
-            return <Tile id={id} contents={tile.type} dark={tile.dark}/>;
-        }
-        // else{
-        //   let id = tile.x+','+tile.y;
-        //   return <Tile id={id} contents={'dark'} />;
-        // }
-        // let id = tile.x+','+tile.y;
-        // return <Tile id={id} contents={tile.type} dark={tile.dark}/>;
+
       });
       
     });
-    // console.log(tileCount);
     return (
       <div>
         <Hud
@@ -600,23 +638,18 @@ class MainDungeonGrid extends React.Component {
           XP={this.state.player.xp}
           weapon = {this.state.player.weapon}
           attack={this.state.player.attack}
-          items={this.state.player.inventory} />
+          items={this.state.player.inventory}
+          mapLevel={this.state.mapLevel} />
         <DisplayMessage currentMessage={this.state.currentMessage} />
-        <div className='MainDungeon'>
+        <div className='MainDungeon' id='MainDungeon'>
           {tileComps}
         </div>
-        <button id='toggleDark' onClick={this.toggleDarkness}>Toggle Darkness</button>
+        <button id='toggleViewAll' onClick={this.toggleViewAll}>Toggle Entire Map</button>
       </div>
     );
   }
 }
-const PlayerComp = (props) => {
-  return (
-    <div className = 'player' id={props.id}>
 
-    </div>
-  )
-}
 class Tile extends React.Component {
   constructor(props) {
     super(props);
@@ -625,11 +658,19 @@ class Tile extends React.Component {
   render() {
     var tileClass;
     var playerComponent = false;
-    if(this.props.contents == 'player'){
+    if(this.props.contents == 'enemy'){
+      tileClass = 'floor'
+      return (
+        <div className={tileClass} id = {this.props.id}>
+          <div className={this.props.enemyName}></div>
+        </div>
+      )
+    }
+    else if(this.props.contents != 'floor' && this.props.contents != 'cell'){
       tileClass = 'floor';
       return (
         <div className={tileClass} id = {this.props.id}>
-          <PlayerComp id={this.props.id} />
+          <div className={this.props.contents}></div>
         </div>
       )
     }
@@ -637,49 +678,6 @@ class Tile extends React.Component {
       tileClass = this.props.contents;
     }
 
-    // if(this.props.dark) {
-    //   tileClass = 'Dark';
-    // }
-    // else if(this.props.contents == 'player') {
-    //   tileClass = 'Player';
-    // }
-    // else if(this.props.contents == 'floor') {
-    //   tileClass = 'floor';
-    // }
-    // else if(this.props.contents == 'cell') {
-    //   tileClass = 'Wall';
-    // }
-    // else if(this.props.contents == 'key') {
-    //   tileClass = 'Key';
-    // }
-    // else if(this.props.contents == 'door') {
-    //   tileClass = 'Door';
-    // }
-    // else if(this.props.contents == 'Shortsword') {
-    //   tileClass = 'ShortSword';
-    // }
-    // else if(this.props.contents == 'Longsword') {
-    //   tileClass = 'LongSword'
-    // }
-    // else if(this.props.contents.enemyName == 'Slime') {
-    //   tileClass = 'Slime';
-    // }
-    // else if(this.props.contents.enemyName == 'Chief Orc') {
-    //   tileClass = 'ChiefOrc';
-    // }
-    // else if(this.props.contents == 'potion') {
-    //   tileClass = 'Potion';
-    // }
-    // else if(this.props.contents =='stairsUp') {
-    //   tileClass = 'StairsUp';
-    // }
-    // else if(this.props.contents =='treasure') {
-    //   tileClass = 'Treasure';
-    // }
-    
-    // else {
-    //   tileClass='Tile';sdea
-    // } 
     return (
       <div className={tileClass} id = {this.props.id}></div>
     );
